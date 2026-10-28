@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import math
 from datetime import date, timedelta
 
 import pydeck as pdk
@@ -124,12 +125,15 @@ points = [
     for s in segments
 ]
 path = [{"path": [[p["lon"], p["lat"]] for p in points]}]
-mid_lat = sum(p["lat"] for p in points) / len(points)
-mid_lon = sum(p["lon"] for p in points) / len(points)
+lats, lons = [p["lat"] for p in points], [p["lon"] for p in points]
+mid_lat, mid_lon = (min(lats) + max(lats)) / 2, (min(lons) + max(lons)) / 2
+# Zoom so the whole route fits: wider span -> lower zoom.
+span = max(max(lats) - min(lats), (max(lons) - min(lons)) * 0.6, 5)
+zoom = max(1.0, min(6.0, math.log2(360 / span) - 1.1))
 st.pydeck_chart(
     pdk.Deck(
         map_style=pdk.map_styles.CARTO_LIGHT,
-        initial_view_state=pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=1.6),
+        initial_view_state=pdk.ViewState(latitude=mid_lat, longitude=mid_lon, zoom=zoom),
         layers=[
             pdk.Layer("PathLayer", path, get_path="path", get_color=[90, 120, 200],
                       width_min_pixels=2, get_width=3),
@@ -139,7 +143,7 @@ st.pydeck_chart(
         ],
         tooltip={"text": "{name}\nrisk: {risk}"},
     ),
-    height=340,
+    height=440,
 )
 st.caption("Schematic route: straight lines between waypoints, not a sailing track.")
 
@@ -162,7 +166,7 @@ with left:
 with right:
     st.subheader("Check before laycan")
     for item in brief.get("pre_laycan_checks", []):
-        st.checkbox(item, key=f"chk-{item}")
+        st.markdown(f"☐ {item}")
     if brief.get("uncertainties"):
         st.subheader("What we don't know")
         for u in brief["uncertainties"]:
