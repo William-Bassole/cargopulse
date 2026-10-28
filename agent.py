@@ -74,29 +74,59 @@ def _model() -> str:
     return get_secret("NEBIUS_MODEL", DEFAULT_MODEL) or DEFAULT_MODEL
 
 
-def _chat_json(system: str, user: str, max_tokens: int = 2500) -> dict:
-    """Call Nemotron and parse a JSON object out of the answer."""
-    response = _client().chat.completions.create(
-        model=_model(),
-        temperature=0.2,
-        max_tokens=max_tokens,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    )
-    text = response.choices[0].message.content or ""
-    return extract_json(text)
+def _chat_json(system: str, user: str, max_tokens: int = 3000) -> dict:
+    """Call Nemotron and parse a JSON object out of the answer.
+
+    JSON mode is requested and reasoning is switched off so the reply is just the
+    object. If the reply is still malformed, Nemotron gets one chance to fix it.
+    """
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+    text = _complete(messages, max_tokens)
+    try:
+        return extract_json(text)
+    except ValueError:
+        messages += [
+            {"role": "assistant", "content": text},
+            {"role": "user", "content": "That was not valid JSON. Return the same "
+                                        "content as one valid JSON object only."},
+        ]
+        return extract_json(_complete(messages, max_tokens))
+
+
+def _complete(messages: list[dict], max_tokens: int) -> str:
+    kwargs = dict(model=_model(), temperature=0.2, max_tokens=max_tokens, messages=messages)
+    try:
+        response = _client().chat.completions.create(
+            **kwargs,
+            response_format={"type": "json_object"},
+            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+        )
+    except Exception:  # endpoint does not accept these options: plain call
+        response = _client().chat.completions.create(**kwargs)
+    return response.choices[0].message.content or ""
 
 
 def extract_json(text: str) -> dict:
-    """Strip reasoning blocks / code fences and return the first JSON object."""
+    """Return the largest JSON object found in the text (ignores reasoning and fences)."""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
     text = re.sub(r"```(?:json)?", "", text)
-    start, end = text.find("{"), text.rfind("}")
-    if start == -1 or end == -1:
-        raise ValueError("The model did not return JSON.")
-    return json.loads(text[start : end + 1])
+    decoder = json.JSONDecoder()
+    best: dict | None = None
+    for i, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(text, i)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(obj, dict) and (best is None or len(str(obj)) > len(str(best))):
+            best = obj
+    if best is None:
+        raise ValueError("The model did not return valid JSON.")
+    return best
 
 
 # ---------------------------------------------------------------------- step 1
@@ -122,7 +152,7 @@ def _port_segment(port: str, kind: str, commodity: str) -> Segment:
     _, lat, lon = PORTS[port]
     city = port.split(" (")[0]
     return Segment(port, kind, lat, lon,
-                   f"{city} port congestion strike weather {commodity} shipping")
+                   f"{city} port {commodity} terminal congestion delay")
 
 
 def _plan_with_nemotron(voyage: Voyage) -> list[str]:
@@ -199,6 +229,10 @@ voyage, segment by segment, using ONLY the numbered sources provided.
 
 Rules:
 - Every finding must cite source IDs from the list (e.g. ["S3"]). Never invent sources.
+- Only use a source for a segment if it is actually about that place AND relevant to
+  this cargo's shipping (tankers, bulk carriers, LNG carriers, port terminals).
+  Ignore container-volume statistics, cruise ships, other ports or general market
+  commentary. Old background (e.g. events from previous years) is context, not news.
 - If a segment has no relevant source, set risk to "insufficient" and say so.
 - Risk scale: low, medium, high, insufficient. Rate the impact on THIS voyage and laycan.
 - Think like operations: transit delays, rerouting, port congestion, berth waits,
