@@ -48,7 +48,7 @@ def badge(risk: str) -> str:
 keys_ready = bool(get_secret("NEBIUS_API_KEY") and get_secret("TAVILY_API_KEY"))
 
 # ------------------------------------------------------------------- header
-st.title("🚢 CargoPulse")
+st.title("🚢 CargoPulse", anchor=False)
 st.caption(
     "Voyage disruption brief for commodity trading operations. Enter a cargo, "
     "CargoPulse maps the chokepoints it will cross, searches recent news for each "
@@ -150,7 +150,7 @@ st.caption("Schematic route: straight lines between waypoints, not a sailing tra
 # ------------------------------------------------------------------- segments
 left, right = st.columns([1.6, 1])
 with left:
-    st.subheader("Segment by segment")
+    st.subheader("Segment by segment", anchor=False)
     for s in segments:
         refs = ", ".join(s["source_ids"]) if s["source_ids"] else "no source"
         impact = (f'<div style="margin-top:6px"><b>Voyage impact:</b> '
@@ -164,16 +164,16 @@ with left:
         )
 
 with right:
-    st.subheader("Check before laycan")
+    st.subheader("Check before laycan", anchor=False)
     for item in brief.get("pre_laycan_checks", []):
         st.markdown(f"☐ {item}")
     if brief.get("uncertainties"):
-        st.subheader("What we don't know")
+        st.subheader("What we don't know", anchor=False)
         for u in brief["uncertainties"]:
             st.markdown(f"- {u}")
 
 # ------------------------------------------------------------------- sources
-st.subheader(f"Sources ({len(sources)})")
+st.subheader(f"Sources ({len(sources)})", anchor=False)
 if not sources:
     st.write("No recent sources were found for this voyage.")
 for sid, src in sources.items():
