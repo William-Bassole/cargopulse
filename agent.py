@@ -143,9 +143,20 @@ def plan_route(voyage: Voyage) -> tuple[list[Segment], str]:
     segments = [_port_segment(voyage.origin, "load", voyage.commodity)]
     for cp in chokepoints:
         lat, lon, hint = KNOWN_CHOKEPOINTS[cp]
-        segments.append(Segment(cp, "chokepoint", lat, lon, f"{hint} disruption"))
+        vessel = vessel_type(voyage.commodity)
+        segments.append(Segment(cp, "chokepoint", lat, lon, f"{hint} {vessel} disruption"))
     segments.append(_port_segment(voyage.destination, "discharge", voyage.commodity))
     return segments, method
+
+
+def vessel_type(commodity: str) -> str:
+    """The ship type that carries this cargo, used to keep searches on topic."""
+    c = commodity.lower()
+    if "lng" in c:
+        return "LNG carrier"
+    if any(k in c for k in ("crude", "diesel", "gasoil", "oil")):
+        return "oil tanker"
+    return "bulk carrier"
 
 
 def _port_segment(port: str, kind: str, commodity: str) -> Segment:
@@ -234,6 +245,10 @@ Rules:
   Ignore container-volume statistics, cruise ships, other ports or general market
   commentary. Old background (e.g. events from previous years) is context, not news.
 - If a segment has no relevant source, set risk to "insufficient" and say so.
+- "low" needs positive evidence: a source that reports normal operations at that place
+  for this type of vessel. If the sources are generic, off-topic or simply don't mention
+  a problem, that is "insufficient", not "low". Absence of news is not evidence.
+- Cite only the sources that directly support the finding, not every source of the segment.
 - Risk scale: low, medium, high, insufficient. Rate the impact on THIS voyage and laycan.
 - Think like operations: transit delays, rerouting, port congestion, berth waits,
   demurrage exposure, insurance (war risk) premiums, sanctions or inspection holds.
