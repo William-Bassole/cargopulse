@@ -249,6 +249,9 @@ Rules:
   for this type of vessel. If the sources are generic, off-topic or simply don't mention
   a problem, that is "insufficient", not "low". Absence of news is not evidence.
 - Cite only the sources that directly support the finding, not every source of the segment.
+- Container terminal news (empty containers, TEU volumes, box ships, container yards)
+  says nothing about tanker, LNG or dry bulk berths. Never use it to rate a port for
+  this cargo unless the cargo itself moves in containers.
 - Risk scale: low, medium, high, insufficient. Rate the impact on THIS voyage and laycan.
 - Think like operations: transit delays, rerouting, port congestion, berth waits,
   demurrage exposure, insurance (war risk) premiums, sanctions or inspection holds.
