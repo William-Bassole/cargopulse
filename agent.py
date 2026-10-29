@@ -278,16 +278,54 @@ def write_brief(voyage: Voyage, segments: list[Segment], catalog: dict[str, dict
     return validate_brief(brief, segments, catalog)
 
 
+def _source_ids(value, *texts: str) -> list[str]:
+    """Normalise whatever the model returned ("S3", "[S3]", "s3", 3, "S3, S4") into
+    ["S3", ...]. Falls back to IDs mentioned inline in the finding text."""
+    raw = value if isinstance(value, list) else [value]
+    found: list[str] = []
+    for v in raw:
+        if isinstance(v, int):
+            found.append(f"S{v}")
+        elif v is not None:
+            found += [f"S{n}" for n in re.findall(r"[Ss]\s*(\d+)", str(v))]
+            if str(v).strip().isdigit():
+                found.append(f"S{str(v).strip()}")
+    if not found:
+        for t in texts:
+            found += [f"S{n}" for n in re.findall(r"\b[Ss](\d+)\b", t or "")]
+    return list(dict.fromkeys(found))  # dedupe, keep order
+
+
+def _match_segment(name: str, items: list[dict]) -> dict:
+    """Find the model's entry for a segment, tolerating 'Santos' vs 'Santos (Brazil)'."""
+    for it in items:
+        if it.get("name") == name:
+            return it
+    short = name.split(" (")[0].split(" /")[0].lower()
+    for it in items:
+        other = str(it.get("name", "")).lower()
+        if other and (short in other or other.split(" (")[0] in name.lower()):
+            return it
+    return {}
+
+
 def validate_brief(brief: dict, segments: list[Segment], catalog: dict[str, dict]) -> dict:
     """Drop invented source IDs and downgrade unsupported claims to 'insufficient'."""
-    by_name = {s.get("name"): s for s in brief.get("segments", []) if isinstance(s, dict)}
+    items = [s for s in brief.get("segments", []) if isinstance(s, dict)]
     clean = []
     for seg in segments:
-        item = by_name.get(seg.name, {})
-        ids = [i for i in item.get("source_ids", []) if i in catalog]
+        item = _match_segment(seg.name, items)
+        finding = item.get("finding") or "No relevant recent reporting found."
+        impact = item.get("voyage_impact") or ""
+        ids = [i for i in _source_ids(item.get("source_ids"), finding, impact) if i in catalog]
         risk = str(item.get("risk", "insufficient")).lower()
-        if risk not in RISK_LEVELS or (not ids and risk != "insufficient"):
+        if risk not in RISK_LEVELS:
             risk = "insufficient"
+        if not ids and risk != "insufficient":
+            # The model rated the segment but cited nothing we gave it: don't show it as fact.
+            risk = "insufficient"
+            finding = f"Not backed by a cited source: {finding}"
+            impact = ""
         clean.append(
             {
                 "name": seg.name,
@@ -295,8 +333,8 @@ def validate_brief(brief: dict, segments: list[Segment], catalog: dict[str, dict
                 "lat": seg.lat,
                 "lon": seg.lon,
                 "risk": risk,
-                "finding": item.get("finding") or "No relevant recent reporting found.",
-                "voyage_impact": item.get("voyage_impact") or "",
+                "finding": finding,
+                "voyage_impact": impact,
                 "source_ids": ids,
             }
         )
