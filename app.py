@@ -34,6 +34,10 @@ st.markdown(
       .cp-kind {opacity:0.6; font-size:0.8rem; margin-left:6px;}
       .cp-src {font-size:0.85rem; opacity:0.85;}
       .cp-headline {font-size:1.15rem; font-weight:600; margin:0.3rem 0 0.8rem;}
+      /* let long checklist items wrap instead of being cut with "..." */
+      [data-testid="stCheckbox"] label, [data-testid="stCheckbox"] p {
+          white-space: normal !important; overflow: visible !important;
+          text-overflow: clip !important;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -165,8 +169,8 @@ with left:
 
 with right:
     st.subheader("Check before laycan", anchor=False)
-    for item in brief.get("pre_laycan_checks", []):
-        st.markdown(f"☐ {item}")
+    for i, item in enumerate(brief.get("pre_laycan_checks", [])):
+        st.checkbox(item, key=f"check-{i}-{hash(item)}")
     if brief.get("uncertainties"):
         st.subheader("What we don't know", anchor=False)
         for u in brief["uncertainties"]:

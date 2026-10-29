@@ -75,6 +75,10 @@ check_keys.py     Sanity check for API keys and available models
 - The route table covers common trades; other voyages rely on Nemotron's choice from the known chokepoint list.
 - Quality depends on what Tavily finds in recent news. When nothing relevant comes back, CargoPulse says "insufficient" instead of guessing.
 
+## How it was built
+
+The idea and the product choices are mine: who CargoPulse is for, the decision to start from a voyage rather than a region, the risks that matter to an operations desk, and how the app should behave when the sources are thin. Most of the code was generated with an AI coding assistant (Claude) from my prompts. I then ran live briefs, looked at what came back, and refined it over several rounds, for example by filtering off-topic sources and making the model answer "insufficient" instead of guessing.
+
 ## License
 
 MIT, see [LICENSE](LICENSE).
