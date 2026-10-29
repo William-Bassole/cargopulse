@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import html
 import math
-from datetime import date, timedelta
+import threading
+import time
+from datetime import date, datetime, timedelta, timezone
 
 import pydeck as pdk
 import streamlit as st
@@ -14,6 +16,18 @@ from routes import COMMODITIES, PORTS
 from sample_data import SAMPLE_VOYAGE, sample_result
 
 st.set_page_config(page_title="CargoPulse", page_icon="🚢", layout="wide")
+
+# --- Abuse protection: the demo is public, live briefs cost API calls. ---
+CACHE_TTL_S = 30 * 60      # identical voyage re-uses the same brief for 30 min
+SESSION_LIMIT = 5          # live briefs per browser session
+COOLDOWN_S = 20            # minimum gap between two live briefs in one session
+DAILY_LIMIT = int(get_secret("DAILY_LIVE_LIMIT", "150") or 150)  # whole app, per UTC day
+
+
+@st.cache_resource
+def shared_state() -> dict:
+    """One object shared by every visitor of this app instance."""
+    return {"lock": threading.Lock(), "day": "", "count": 0, "cache": {}}
 
 RISK_COLORS = {
     "low": ("#1f9d55", [31, 157, 85]),
@@ -88,16 +102,52 @@ if submitted:
         st.session_state["voyage"] = Voyage(**SAMPLE_VOYAGE, laycan_start=laycan_start,
                                              laycan_end=laycan_end)
     else:
-        try:
-            with st.status("Running the CargoPulse agent", expanded=True) as status:
-                result = run_pipeline(voyage, progress=lambda m: status.write(f"• {m}"))
-                status.update(label="Brief ready", state="complete", expanded=False)
+        state = shared_state()
+        key = (commodity, origin, destination, str(laycan_start), str(laycan_end))
+        with state["lock"]:
+            hit = state["cache"].get(key)
+        if hit and time.time() - hit[0] < CACHE_TTL_S:
+            # Same voyage was briefed recently: reuse it, no new API calls.
+            st.session_state["result"] = hit[1]
+            st.session_state["voyage"] = voyage
+        else:
+            runs = st.session_state.get("live_runs", 0)
+            since_last = time.time() - st.session_state.get("last_run", 0.0)
+            if runs >= SESSION_LIMIT:
+                st.warning(f"You've used the {SESSION_LIMIT} live briefs available per "
+                           "session on this free demo. Switch on sample mode to keep exploring.")
+                st.stop()
+            if since_last < COOLDOWN_S:
+                st.warning(f"Please wait {int(COOLDOWN_S - since_last)} seconds "
+                           "before running another live brief.")
+                st.stop()
+            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            with state["lock"]:
+                if state["day"] != today:
+                    state["day"], state["count"] = today, 0
+                if state["count"] >= DAILY_LIMIT:
+                    allowed = False
+                else:
+                    state["count"] += 1
+                    allowed = True
+            if not allowed:
+                st.warning("The daily limit of live briefs for this free demo has been "
+                           "reached. Switch on sample mode, or come back tomorrow.")
+                st.stop()
+            st.session_state["live_runs"] = runs + 1
+            st.session_state["last_run"] = time.time()
+            try:
+                with st.status("Running the CargoPulse agent", expanded=True) as status:
+                    result = run_pipeline(voyage, progress=lambda m: status.write(f"• {m}"))
+                    status.update(label="Brief ready", state="complete", expanded=False)
+            except Exception as exc:
+                st.error(f"The live run failed: {exc}. Check your API keys and model ID, "
+                         "or switch on sample mode.")
+                st.stop()
+            with state["lock"]:
+                state["cache"][key] = (time.time(), result)
             st.session_state["result"] = result
             st.session_state["voyage"] = voyage
-        except Exception as exc:
-            st.error(f"The live run failed: {exc}. Check your API keys and model ID, "
-                     "or switch on sample mode.")
-            st.stop()
 
 result = st.session_state.get("result")
 if not result:
