@@ -6,7 +6,9 @@ You tell CargoPulse about a cargo: the commodity, the load port, the discharge p
 
 Built for the Nebius x NVIDIA Global AI Hackathon 2026, Best Apps and Agents track.
 
-> Live demo: `<your Streamlit URL>` · Video: `<your YouTube link>`
+> Live demo: [cargopulse.streamlit.app](https://cargopulse.streamlit.app) · Video: [submission demo](https://youtu.be/l3GJgtxoRqA)
+>
+> **New:** [voice-over version of the demo](https://youtu.be/UU8QUUAFsgQ)
 
 ## The problem
 
